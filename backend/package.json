@@ -1,0 +1,19 @@
+{
+  "name": "propiedadespy-backend",
+  "version": "1.0.0",
+  "description": "Backend para PropiedadesPY - WhatsApp Business API",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "twilio": "^4.19.0",
+    "openai": "^4.20.1",
+    "body-parser": "^1.20.2"
+  }
+}
