@@ -309,9 +309,18 @@ app.post('/api/ai/process', async (req, res) => {
 
 // ============ TWILIO WEBHOOK ============
 
-// // Receive incoming WhatsApp messages - RESPUESTA RÁPIDA
+// Almacenar quién ya saludó (simple, en memoria)
+const greetedUsers = new Set();
+
+// Receive incoming WhatsApp messages - RESPUESTA RÁPIDA
 app.post('/webhook/whatsapp', async (req, res) => {
   const { Body, From, ProfileName } = req.body;
+  
+  console.log('Incoming WhatsApp message:', {
+    from: From,
+    body: Body,
+    profileName: ProfileName,
+  });  const { Body, From, ProfileName } = req.body;
   
   console.log('Incoming WhatsApp message:', {
     from: From,
@@ -324,13 +333,37 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
   // 2. Procesar en segundo plano (después de responder)
   try {
-    // Mensaje de "estoy pensando" opcional
+    const lowerBody = Body.toLowerCase();
+    
+    // Si es "hola" o primera vez, preguntar qué busca (no buscar propiedades aún)
+    if ((lowerBody.includes('hola') || lowerBody.includes('buenas') || !greetedUsers.has(From)) && 
+        !lowerBody.includes('casa') && 
+        !lowerBody.includes('departamento') && 
+        !lowerBody.includes('duplex') && 
+        !lowerBody.includes('dúplex') && 
+        !lowerBody.includes('terreno') && 
+        !lowerBody.includes('oficina') &&
+        !lowerBody.includes('local') &&
+        !lowerBody.includes('alquil') && 
+        !lowerBody.includes('compr') &&
+        !lowerBody.includes('busco')) {
+      
+      greetedUsers.add(From);
+      
+      await twilioClient.messages.create({
+        body: '¡Hola! 👋 Soy el asistente de APE Inmobiliaria.\n\n¿Qué tipo de propiedad buscas? (casa, departamento, dúplex, terreno, oficina, local)\n\nO escríbeme tu búsqueda completa, por ejemplo:\n• "Quiero alquilar un departamento en Villa Morra"\n• "Busco casa en Luque 3 dormitorios"\n• "Terreno en San Bernardino hasta 100000 USD"',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return; // No continuar con la búsqueda
+    }
+
+    // Mensaje de "estoy pensando" solo si vamos a buscar
     await twilioClient.messages.create({
       body: '⏳ Buscando propiedades para ti...',
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
       to: From,
     });
-
     // Procesar con IA
     const criteria = await extractCriteriaWithAI(Body);
     const results = searchProperties(criteria);
