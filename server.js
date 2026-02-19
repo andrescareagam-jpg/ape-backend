@@ -309,23 +309,34 @@ app.post('/api/ai/process', async (req, res) => {
 
 // ============ TWILIO WEBHOOK ============
 
-// Receive incoming WhatsApp messages
+// // Receive incoming WhatsApp messages - RESPUESTA RÁPIDA
 app.post('/webhook/whatsapp', async (req, res) => {
+  const { Body, From, ProfileName } = req.body;
+  
+  console.log('Incoming WhatsApp message:', {
+    from: From,
+    body: Body,
+    profileName: ProfileName,
+  });
+
+  // 1. Responder INMEDIATAMENTE a Twilio (evita timeout)
+  res.status(200).send('OK');
+
+  // 2. Procesar en segundo plano (después de responder)
   try {
-    const { Body, From, ProfileName } = req.body;
-    
-    console.log('Incoming WhatsApp message:', {
-      from: From,
-      body: Body,
-      profileName: ProfileName,
+    // Mensaje de "estoy pensando" opcional
+    await twilioClient.messages.create({
+      body: '⏳ Buscando propiedades para ti...',
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: From,
     });
 
-    // Process message with AI
+    // Procesar con IA
     const criteria = await extractCriteriaWithAI(Body);
     const results = searchProperties(criteria);
     const aiMessage = await generateAIResponse(Body, criteria, results);
 
-    // Build response message
+    // Construir respuesta final
     let responseMessage = aiMessage;
     
     if (results.length > 0) {
@@ -339,17 +350,24 @@ app.post('/webhook/whatsapp', async (req, res) => {
       responseMessage += '\n¿Te interesa alguna? Responde con el número para más detalles.';
     }
 
-    // Send response via Twilio
+    // Enviar respuesta final
     await twilioClient.messages.create({
       body: responseMessage,
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
       to: From,
     });
 
-    res.status(200).send('OK');
+    console.log('Response sent successfully');
+
   } catch (error) {
-    console.error('Webhook error:', error);
-    res.status(500).send('Error');
+    console.error('Error processing message:', error);
+    
+    // Mensaje de error al usuario
+    await twilioClient.messages.create({
+      body: 'Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo.',
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: From,
+    });
   }
 });
 
