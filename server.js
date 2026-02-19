@@ -143,15 +143,28 @@ async function extractCriteriaWithAI(message) {
       messages: [
         {
           role: 'system',
-          content: `Eres un asistente inmobiliario para Paraguay. Extrae los criterios de búsqueda del mensaje.
-Responde SOLO con un objeto JSON:
+          content: `Eres Kape, el extractor de criterios de APE.
+
+TU TRABAJO: Analizar el mensaje del usuario y extraer datos estructurados.
+
+REGLAS IMPORTANTES:
+- Responde SOLO con un objeto JSON válido
+- NO agregues texto explicativo antes o después del JSON
+- Si el usuario responde "1", interpretar: tipo = "alquiler"
+- Si responde "2", interpretar: tipo = "venta"
+- Si responde "3", interpretar: intencion = "vender"
+- Si responde "4", interpretar: intencion = "contactar_agente"
+- Para texto libre, extraer: QUE (tipoPropiedad), DONDE (barrio/ciudad), CUANTO (precioMax)
+
+FORMATO DE RESPUESTA:
 {
   "tipo": "venta" | "alquiler" | null,
   "tipoPropiedad": "casa" | "departamento" | "duplex" | "terreno" | "local" | "oficina" | null,
   "dormitorios": number | null,
   "precioMax": number | null,
   "barrio": string | null,
-  "ciudad": string | null
+  "ciudad": string | null,
+  "intencion": "buscar" | "vender" | "contactar_agente" | null
 }`
         },
         { role: 'user', content: message },
@@ -219,7 +232,23 @@ async function generateAIResponse(message, criteria, results) {
       messages: [
         {
           role: 'system',
-          content: `Eres un asistente inmobiliario amigable de PropiedadesPY Paraguay. Responde de forma breve y natural para WhatsApp (máximo 2-3 oraciones).`
+          content: `Eres Kape, el asistente inteligente de APE.
+
+TU PERSONALIDAD:
+- Amigable, directo y servicial. Un "kape" de verdad.
+- Usas español natural: "depto", "vivienda", "zona", "cerca de".
+- No eres robótico. Tienes calidez pero siempre profesional.
+
+TU TRABAJO:
+1. Ayudar a encontrar propiedades conectando con agentes e inmobiliarias aliadas.
+2. Extraer: QUE (tipo), DONDE (zona), CUANTO (presupuesto).
+3. Si falta algo, preguntas amablemente.
+4. Presentas opciones reales de agentes verificados.
+
+REGLAS:
+- Firmas como "Kape" o "Tu Kape de APE".
+- Nunca inventes propiedades.
+- Respetas siempre a los agentes. Ellos son aliados, no competencia.`
         },
         {
           role: 'user',
@@ -307,6 +336,9 @@ app.post('/api/ai/process', async (req, res) => {
   }
 });
 
+// Almacenar quien ya saludo
+const greetedUsers = new Set();
+
 // ============ TWILIO WEBHOOK ============
 
 // // Receive incoming WhatsApp messages - RESPUESTA RÁPIDA
@@ -324,6 +356,116 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
   // 2. Procesar en segundo plano (después de responder)
   try {
+    const lowerBody = Body.toLowerCase();
+    
+    // Detectar si es primera vez o saludo
+    const esPrimeraVez = !greetedUsers.has(From);
+    const esSaludo = lowerBody.includes('hola') || 
+                     lowerBody.includes('buenas') || 
+                     lowerBody.includes('hey') ||
+                     lowerBody === 'kape' ||
+                     lowerBody === 'holi';
+    
+    // Detectar si ya quiere buscar algo especifico
+    const quiereBuscar = lowerBody.includes('casa') || 
+                         lowerBody.includes('departamento') || 
+                         lowerBody.includes('depto') || 
+                         lowerBody.includes('duplex') || 
+                         lowerBody.includes('dúplex') || 
+                         lowerBody.includes('terreno') || 
+                         lowerBody.includes('oficina') ||
+                         lowerBody.includes('local') ||
+                         lowerBody.includes('alquil') || 
+                         lowerBody.includes('compr') ||
+                         lowerBody.includes('busco') ||
+                         lowerBody.includes('necesito') ||
+                         lowerBody.includes('vendo') ||
+                         lowerBody.includes('vender') ||
+                         /^\d+$/.test(Body.trim()); // Numeros 1, 2, 3, 4
+    
+    // Si es primera vez o saludo, y NO quiere buscar todavia, mostrar menu
+    if ((esPrimeraVez || esSaludo) && !quiereBuscar) {
+      greetedUsers.add(From);
+      
+      await twilioClient.messages.create({
+        body: 'Hola, soy Kape. ¿Con que te ayudo?\n\n' +
+              '1. Buscar propiedad para alquilar\n' +
+              '2. Buscar propiedad para comprar\n' +
+              '3. Vender mi propiedad\n' +
+              '4. Hablar con un agente\n\n' +
+              'Responde con el numero o escribime tu busqueda directamente.',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return;
+    }
+    
+    // Si responde con numero, marcar como saludado y continuar
+    if (/^[1-4]$/.test(Body.trim())) {
+      greetedUsers.add(From);
+    }
+
+    // Mensaje de "buscando"
+    await twilioClient.messages.create({
+      body: 'Buscando propiedades para ti...',
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: From,
+    });
+    const lowerBody = Body.toLowerCase();
+    
+    // Detectar si es primera vez o saludo
+    const esPrimeraVez = !greetedUsers.has(From);
+    const esSaludo = lowerBody.includes('hola') || 
+                     lowerBody.includes('buenas') || 
+                     lowerBody.includes('hey') ||
+                     lowerBody === 'kape' ||
+                     lowerBody === 'holi';
+    
+    // Detectar si ya quiere buscar algo especifico
+    const quiereBuscar = lowerBody.includes('casa') || 
+                         lowerBody.includes('departamento') || 
+                         lowerBody.includes('depto') || 
+                         lowerBody.includes('duplex') || 
+                         lowerBody.includes('dúplex') || 
+                         lowerBody.includes('terreno') || 
+                         lowerBody.includes('oficina') ||
+                         lowerBody.includes('local') ||
+                         lowerBody.includes('alquil') || 
+                         lowerBody.includes('compr') ||
+                         lowerBody.includes('busco') ||
+                         lowerBody.includes('necesito') ||
+                         lowerBody.includes('vendo') ||
+                         lowerBody.includes('vender') ||
+                         /^\d+$/.test(Body.trim());
+    
+    // Si es primera vez o saludo, y NO quiere buscar todavia, mostrar menu
+    if ((esPrimeraVez || esSaludo) && !quiereBuscar) {
+      greetedUsers.add(From);
+      
+      await twilioClient.messages.create({
+        body: 'Hola, soy Kape. ¿Con que te ayudo?\n\n' +
+              '1. Buscar propiedad para alquilar\n' +
+              '2. Buscar propiedad para comprar\n' +
+              '3. Vender mi propiedad\n' +
+              '4. Hablar con un agente\n\n' +
+              'Responde con el numero o escribime tu busqueda directamente.',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return;
+    }
+    
+    // Si responde con numero, marcar como saludado y continuar
+    if (/^[1-4]$/.test(Body.trim())) {
+      greetedUsers.add(From);
+    }
+
+    // Mensaje de "buscando"
+    await twilioClient.messages.create({
+      body: 'Buscando propiedades para ti...',
+      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+      to: From,
+    });
     // Mensaje de "estoy pensando" opcional
     await twilioClient.messages.create({
       body: '⏳ Buscando propiedades para ti...',
@@ -347,7 +489,7 @@ app.post('/webhook/whatsapp', async (req, res) => {
         responseMessage += `   📍 ${p.neighborhood}, ${p.city}\n`;
         responseMessage += `   🏠 ${p.bedrooms} dorm, ${p.area}m²\n`;
       });
-      responseMessage += '\n¿Te interesa alguna? Responde con el número para más detalles.';
+      responseMessage += '\n¿Te interesa alguna? Responde con el numero para mas detalles, o escribe SIGUIENTE para ver mas opciones.';
     }
 
     // Enviar respuesta final
