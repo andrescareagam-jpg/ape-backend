@@ -826,3 +826,200 @@ app.listen(PORT, () => {
 ╚════════════════════════════════════════════════════════════╝
   `);
 });
+
+// GENERADOR DE PROPIEDADES ALEATORIAS
+const barriosAsuncion = [
+  'Villa Morra', 'Las Carmelitas', 'Recoleta', 'Centro', 'San Cristóbal',
+  'Los Laureles', 'Manora', 'Mburucuyá', 'Carmelitas', 'Loma Pyta',
+  'San Jorge', 'Botánico', 'Ycuá Satí', 'La Encarnación', 'Tembetary'
+];
+
+const barriosGranAsuncion = [
+  'Luque', 'Lambaré', 'Fernando de la Mora', 'San Lorenzo', 'Capiatá',
+  'Mariano Roque Alonso', 'Nemby', 'Villa Elisa', 'Ñemby', 'Itauguá'
+];
+
+const ciudadesInterior = [
+  'San Bernardino', 'Areguá', 'Caacupé', 'Paraguarí', 'Piribebuy',
+  'Altos', 'San José', 'Emboscada', 'Tobatí', 'Itacurubí de la Cordillera'
+];
+
+const tiposPropiedad = ['casa', 'departamento', 'duplex', 'terreno', 'local', 'oficina'];
+const nombresAgentes = [
+  'María González', 'Carlos Rodríguez', 'Ana Martínez', 'Pedro Benítez', 'Luisa Fernández',
+  'Juan Pérez', 'Laura Gómez', 'Carlos Ruiz', 'Sofia López', 'Diego Martínez',
+  'Valeria Rojas', 'Fernando Silva', 'Camila Torres', 'Andrés Benítez', 'Paula Giménez'
+];
+
+function randomInt(min, max) {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function randomItem(array) {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function generarPrecio(tipo, operacion) {
+  let base = 0;
+  
+  if (operacion === 'alquiler') {
+    // Precios de alquiler en USD
+    switch(tipo) {
+      case 'casa': base = randomInt(400, 1500); break;
+      case 'departamento': base = randomInt(300, 900); break;
+      case 'duplex': base = randomInt(500, 1200); break;
+      case 'local': base = randomInt(400, 2000); break;
+      case 'oficina': base = randomInt(350, 1500); break;
+      case 'terreno': base = randomInt(200, 800); break; // Alquiler de terreno es raro pero posible
+      default: base = randomInt(300, 1000);
+    }
+  } else {
+    // Precios de venta en USD
+    switch(tipo) {
+      case 'casa': base = randomInt(80000, 500000); break;
+      case 'departamento': base = randomInt(60000, 350000); break;
+      case 'duplex': base = randomInt(100000, 400000); break;
+      case 'local': base = randomInt(120000, 600000); break;
+      case 'oficina': base = randomInt(150000, 500000); break;
+      case 'terreno': base = randomInt(40000, 300000); break;
+      default: base = randomInt(80000, 400000);
+    }
+  }
+  
+  // Redondear a miles
+  return Math.round(base / 1000) * 1000;
+}
+
+function generarArea(tipo) {
+  switch(tipo) {
+    case 'casa': return randomInt(80, 500);
+    case 'departamento': return randomInt(35, 180);
+    case 'duplex': return randomInt(100, 300);
+    case 'local': return randomInt(30, 200);
+    case 'oficina': return randomInt(25, 150);
+    case 'terreno': return randomInt(300, 2000);
+    default: return randomInt(50, 200);
+  }
+}
+
+function generarDormitorios(tipo) {
+  if (tipo === 'local' || tipo === 'terreno' || tipo === 'oficina') return 0;
+  if (tipo === 'departamento') return randomInt(1, 4);
+  return randomInt(2, 5);
+}
+
+function generarTitulo(tipo, barrio, operacion) {
+  const adjetivos = ['Moderno', 'Amplio', 'Luminoso', 'Céntrico', 'Nuevo', 'Económico', 'Exclusivo', 'Acogedor'];
+  const adjetivo = randomItem(adjetivos);
+  const tipoTexto = tipo === 'duplex' ? 'Dúplex' : tipo.charAt(0).toUpperCase() + tipo.slice(1);
+  const operacionTexto = operacion === 'alquiler' ? 'en alquiler' : 'en venta';
+  
+  return `${tipoTexto} ${adjetivo} ${operacionTexto} en ${barrio}`;
+}
+
+function generarDescripcion(tipo, dormitorios, area) {
+  const descripciones = [
+    `Ideal para familias que buscan espacio y comodidad.`,
+    `Perfecto para inversión o vivienda propia.`,
+    `Zona tranquila con todos los servicios cercanos.`,
+    `Excelente ubicación, cerca de colegios y comercios.`,
+    `Propiedad recién renovada, lista para ocupar.`,
+    `Oportunidad única en esta zona.`,
+    `Diseño moderno con acabados de calidad.`,
+    `Espacios amplios y bien distribuidos.`
+  ];
+  
+  let desc = `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} de `;
+  if (dormitorios > 0) {
+    desc += `${dormitorios} dormitorios y `;
+  }
+  desc += `${area}m2. ${randomItem(descripciones)}`;
+  
+  return desc;
+}
+
+function generarAmenities(tipo) {
+  const todasAmenities = [
+    'Cochera', 'Jardín', 'Piscina', 'Parrillero', 'Seguridad 24h',
+    'Aire acondicionado', 'Amueblado', 'Ascensor', 'Balcón', 'Patio',
+    'Terraza', 'Gimnasio', 'Sala de reuniones', 'Depósito', 'Cocina equipada'
+  ];
+  
+  const amenities = [];
+  const cantidad = randomInt(2, 5);
+  
+  for (let i = 0; i < cantidad; i++) {
+    const amenity = randomItem(todasAmenities);
+    if (!amenities.includes(amenity)) {
+      amenities.push(amenity);
+    }
+  }
+  
+  return amenities;
+}
+
+function generarTelefono() {
+  return `+595 9${randomInt(10, 99)} ${randomInt(100, 999)} ${randomInt(100, 999)}`;
+}
+
+// Generar 50 propiedades aleatorias
+function generarPropiedades(cantidad = 50) {
+  const nuevasPropiedades = [];
+  
+  for (let i = 6; i <= cantidad + 5; i++) {
+    const tipo = randomItem(tiposPropiedad);
+    const operacion = Math.random() > 0.4 ? 'alquiler' : 'venta'; // 60% alquiler, 40% venta
+    
+    // Elegir ubicación
+    let barrio, ciudad;
+    const rand = Math.random();
+    if (rand < 0.5) {
+      barrio = randomItem(barriosAsuncion);
+      ciudad = 'Asunción';
+    } else if (rand < 0.8) {
+      barrio = randomItem(barriosGranAsuncion);
+      ciudad = barrio;
+    } else {
+      ciudad = randomItem(ciudadesInterior);
+      barrio = ciudad;
+    }
+    
+    const dormitorios = generarDormitorios(tipo);
+    const area = generarArea(tipo);
+    const precio = generarPrecio(tipo, operacion);
+    const agente = randomItem(nombresAgentes);
+    
+    const propiedad = {
+      id: i.toString(),
+      title: generarTitulo(tipo, barrio, operacion),
+      description: generarDescripcion(tipo, dormitorios, area),
+      price: precio,
+      currency: 'USD',
+      type: operacion,
+      propertyType: tipo,
+      neighborhood: barrio,
+      city: ciudad,
+      bedrooms: dormitorios,
+      bathrooms: tipo === 'terreno' ? 0 : randomInt(1, Math.max(1, dormitorios)),
+      area: area,
+      images: [], // Sin fotos por ahora
+      amenities: generarAmenities(tipo),
+      contact: {
+        name: agente,
+        phone: generarTelefono(),
+        whatsapp: generarTelefono()
+      }
+    };
+    
+    nuevasPropiedades.push(propiedad);
+  }
+  
+  return nuevasPropiedades;
+}
+
+// Agregar propiedades generadas al array original
+const propiedadesGeneradas = generarPropiedades(50);
+properties.push(...propiedadesGeneradas);
+
+console.log(`✅ Se generaron ${propiedadesGeneradas.length} propiedades aleatorias`);
+console.log(`📊 Total de propiedades en base de datos: ${properties.length}`);
