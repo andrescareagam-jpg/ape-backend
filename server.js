@@ -339,9 +339,11 @@ app.post('/api/ai/process', async (req, res) => {
 // Almacenar quien ya saludo
 const greetedUsers = new Set();
 
+// Almacenar estado de conversación por usuario
+const userSessions = new Map();
+
 // ============ TWILIO WEBHOOK ============
 
-// // Receive incoming WhatsApp messages - RESPUESTA RÁPIDA
 app.post('/webhook/whatsapp', async (req, res) => {
   const { Body, From, ProfileName } = req.body;
   
@@ -356,7 +358,10 @@ app.post('/webhook/whatsapp', async (req, res) => {
 
   // 2. Procesar en segundo plano (después de responder)
   try {
-    const lowerBody = Body.toLowerCase();
+    const lowerBody = Body.toLowerCase().trim();
+    
+    // Obtener o crear sesión del usuario
+    let session = userSessions.get(From) || { step: 'inicio', intencion: null, criterios: {} };
     
     // Detectar si es primera vez o saludo
     const esPrimeraVez = !greetedUsers.has(From);
@@ -386,6 +391,8 @@ app.post('/webhook/whatsapp', async (req, res) => {
     // Si es primera vez o saludo, y NO quiere buscar todavia, mostrar menu
     if ((esPrimeraVez || esSaludo) && !quiereBuscar) {
       greetedUsers.add(From);
+      session = { step: 'inicio', intencion: null, criterios: {} };
+      userSessions.set(From, session);
       
       await twilioClient.messages.create({
         body: 'Hola, soy Kape. ¿Con que te ayudo?\n\n' +
@@ -400,38 +407,178 @@ app.post('/webhook/whatsapp', async (req, res) => {
       return;
     }
     
-    // Si responde con numero, marcar como saludado y continuar
-    if (/^[1-4]$/.test(Body.trim())) {
-      greetedUsers.add(From);
+    // MANEJO DE OPCIONES DEL MENÚ
+    if (Body.trim() === '1') {
+      session.intencion = 'alquilar';
+      session.step = 'preguntar_tipo';
+      userSessions.set(From, session);
+      
+      await twilioClient.messages.create({
+        body: '¡Perfecto! Buscas para alquilar 🏠\n\n¿Qué tipo de propiedad necesitas?\n• Casa\n• Departamento\n• Dúplex\n• Local/Oficina\n• Terreno\n\nEscribime el tipo que prefieras.',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return;
     }
-
-    // Mensaje de "buscando"
+    
+    if (Body.trim() === '2') {
+      session.intencion = 'comprar';
+      session.step = 'preguntar_tipo';
+      userSessions.set(From, session);
+      
+      await twilioClient.messages.create({
+        body: '¡Excelente! Buscas para comprar 🏡\n\n¿Qué tipo de propiedad te interesa?\n• Casa\n• Departamento\n• Dúplex\n• Local/Oficina\n• Terreno\n\nEscribime el tipo que prefieras.',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return;
+    }
+    
+    if (Body.trim() === '3') {
+      session.intencion = 'vender';
+      session.step = 'vender_datos';
+      userSessions.set(From, session);
+      
+      await twilioClient.messages.create({
+        body: '¡Genial! Querés vender tu propiedad 📍\n\nPara ayudarte mejor, contame:\n• ¿Qué tipo de propiedad es?\n• ¿En qué zona/barrio está?\n• ¿Cuántos dormitorios tiene?\n• ¿Precio aproximado?\n\nTe conectaré con un agente verificado.',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return;
+    }
+    
+    if (Body.trim() === '4') {
+      session.intencion = 'contactar_agente';
+      session.step = 'contacto';
+      userSessions.set(From, session);
+      
+      await twilioClient.messages.create({
+        body: '¡Claro! Te conecto con un agente de APE 🤝\n\n¿Sobre qué necesitás hablar?\n• Ver una propiedad específica\n• Asesoramiento personalizado\n• Vender/alquilar mi propiedad\n• Otra consulta\n\nContame brevemente y te paso el contacto.',
+        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+        to: From,
+      });
+      return;
+    }
+    
+    // FLUJO DE BÚSQUEDA CON DETALLES
+    if (session.intencion === 'alquilar' || session.intencion === 'comprar') {
+      
+      // Paso 1: Ya tenemos el tipo, ahora preguntar zona
+      if (session.step === 'preguntar_tipo' && Body.trim().length > 0) {
+        session.criterios.tipoPropiedad = Body.trim();
+        session.step = 'preguntar_zona';
+        userSessions.set(From, session);
+        
+        await twilioClient.messages.create({
+          body: `¡${session.criterios.tipoPropiedad} anotado! ✓\n\n¿En qué zona o barrio preferís?\nEjemplos: Villa Morra, Centro, Luque, Lambaré, San Bernardino...\n\nEscribime la zona.`,
+          from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+          to: From,
+        });
+        return;
+      }
+      
+      // Paso 2: Ya tenemos zona, preguntar presupuesto
+      if (session.step === 'preguntar_zona' && Body.trim().length > 0) {
+        session.criterios.barrio = Body.trim();
+        session.step = 'preguntar_presupuesto';
+        userSessions.set(From, session);
+        
+        const tipoTexto = session.intencion === 'alquilar' ? 'alquiler (mensual)' : 'compra';
+        
+        await twilioClient.messages.create({
+          body: `¡Zona ${session.criterios.barrio} anotada! ✓\n\n¿Cuál es tu presupuesto máximo para el ${tipoTexto}?\nEjemplo: 500, 1000, 150000...\n\nEscribime el monto en USD.`,
+          from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+          to: From,
+        });
+        return;
+      }
+      
+      // Paso 3: Ya tenemos presupuesto, preguntar dormitorios
+      if (session.step === 'preguntar_presupuesto' && Body.trim().length > 0) {
+        const precio = parseInt(Body.trim().replace(/\D/g, ''));
+        session.criterios.precioMax = precio || null;
+        session.step = 'preguntar_dormitorios';
+        userSessions.set(From, session);
+        
+        await twilioClient.messages.create({
+          body: `¡Presupuesto anotado! ✓\n\n¿Cuántos dormitorios necesitás mínimo?\n• 1\n• 2\n• 3\n• 4 o más\n\nEscribime el número.`,
+          from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+          to: From,
+        });
+        return;
+      }
+      
+      // Paso 4: Ya tenemos todo, buscar propiedades
+      if (session.step === 'preguntar_dormitorios' && Body.trim().length > 0) {
+        const dormitorios = parseInt(Body.trim());
+        session.criterios.dormitorios = dormitorios || null;
+        session.criterios.tipo = session.intencion === 'alquilar' ? 'alquiler' : 'venta';
+        session.step = 'buscando';
+        userSessions.set(From, session);
+        
+        // Mensaje de búsqueda
+        await twilioClient.messages.create({
+          body: '🔍 Buscando propiedades con tus criterios...',
+          from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+          to: From,
+        });
+        
+        // Buscar propiedades
+        const criteria = session.criterios;
+        const results = searchProperties(criteria);
+        
+        // Construir respuesta
+        let responseMessage = '';
+        
+        if (results.length === 0) {
+          responseMessage = 'No encontré propiedades con esos criterios exactos 😕\n\n¿Querés que busque con filtros más amplios? O escribime otra zona/presupuesto.';
+        } else {
+          responseMessage = `¡Encontré ${results.length} propiedades para vos! 🎉\n\n`;
+          results.slice(0, 3).forEach((p, i) => {
+            responseMessage += `${i + 1}. ${p.title}\n`;
+            responseMessage += `   💰 USD ${p.price.toLocaleString()}${p.type === 'alquiler' ? '/mes' : ''}\n`;
+            responseMessage += `   📍 ${p.neighborhood}, ${p.city}\n`;
+            responseMessage += `   🏠 ${p.bedrooms} dorm, ${p.area}m²\n\n`;
+          });
+          responseMessage += '¿Te interesa alguna? Responde con el número para más detalles, o escribe SIGUIENTE para ver más opciones.';
+        }
+        
+        await twilioClient.messages.create({
+          body: responseMessage,
+          from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+          to: From,
+        });
+        
+        // Resetear sesión para próxima búsqueda
+        userSessions.delete(From);
+        return;
+      }
+    }
+    
+    // Si llegó acá, procesar como mensaje libre (búsqueda directa)
     await twilioClient.messages.create({
-      body: 'Buscando propiedades para ti...',
+      body: '🔍 Buscando propiedades para ti...',
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
       to: From,
     });
 
-    // Procesar con IA
     const criteria = await extractCriteriaWithAI(Body);
     const results = searchProperties(criteria);
     const aiMessage = await generateAIResponse(Body, criteria, results);
 
-    // Construir respuesta final
     let responseMessage = aiMessage;
     
     if (results.length > 0) {
       responseMessage += '\n\n';
       results.slice(0, 3).forEach((p, i) => {
-        responseMessage += `\n${i + 1}. ${p.title}\n`;
+        responseMessage += `${i + 1}. ${p.title}\n`;
         responseMessage += `   💰 USD ${p.price.toLocaleString()}${p.type === 'alquiler' ? '/mes' : ''}\n`;
         responseMessage += `   📍 ${p.neighborhood}, ${p.city}\n`;
-        responseMessage += `   🏠 ${p.bedrooms} dorm, ${p.area}m²\n`;
+        responseMessage += `   🏠 ${p.bedrooms} dorm, ${p.area}m²\n\n`;
       });
-      responseMessage += '\n¿Te interesa alguna? Responde con el numero para mas detalles, o escribe SIGUIENTE para ver mas opciones.';
+      responseMessage += '¿Te interesa alguna? Responde con el número para más detalles, o escribe SIGUIENTE para ver más opciones.';
     }
 
-    // Enviar respuesta final
     await twilioClient.messages.create({
       body: responseMessage,
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
@@ -443,7 +590,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
   } catch (error) {
     console.error('Error processing message:', error);
     
-    // Mensaje de error al usuario
     await twilioClient.messages.create({
       body: 'Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo.',
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
