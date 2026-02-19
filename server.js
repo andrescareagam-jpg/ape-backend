@@ -411,7 +411,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
       to: From,
     });
-    const lowerBody = Body.toLowerCase();
     
     // Detectar si es primera vez o saludo
     const esPrimeraVez = !greetedUsers.has(From);
