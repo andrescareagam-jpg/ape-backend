@@ -310,6 +310,10 @@ app.post('/api/ai/process', async (req, res) => {
 // ============ TWILIO WEBHOOK ============
 
 // // Receive incoming WhatsApp messages - RESPUESTA RÁPIDA
+a// Almacenar estado de conversación (simple, en memoria)
+const conversations = new Map();
+
+// Receive incoming WhatsApp messages
 app.post('/webhook/whatsapp', async (req, res) => {
   const { Body, From, ProfileName } = req.body;
   
@@ -319,76 +323,97 @@ app.post('/webhook/whatsapp', async (req, res) => {
     profileName: ProfileName,
   });
 
-  // 1. Responder INMEDIATAMENTE a Twilio (evita timeout)
+  // Responder inmediatamente
   res.status(200).send('OK');
 
-  // 2. Procesar en segundo plano (después de responder)
   try {
-    // Mensaje de "estoy pensando" opcional
-    await twilioClient.messages.create({
-      body: '⏳ Buscando propiedades para ti...',
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-      to: From,
-    });
-
-    // Procesar con IA
-    const criteria = await extractCriteriaWithAI(Body);
-    const results = searchProperties(criteria);
-    const aiMessage = await generateAIResponse(Body, criteria, results);
-
-    // Construir respuesta final
-    let responseMessage = aiMessage;
+    const lowerBody = Body.toLowerCase();
     
-    if (results.length > 0) {
-      responseMessage += '\n\n';
-      results.slice(0, 3).forEach((p, i) => {
-        responseMessage += `\n${i + 1}. ${p.title}\n`;
-        responseMessage += `   💰 USD ${p.price.toLocaleString()}${p.type === 'alquiler' ? '/mes' : ''}\n`;
-        responseMessage += `   📍 ${p.neighborhood}, ${p.city}\n`;
-        responseMessage += `   🏠 ${p.bedrooms} dorm, ${p.area}m²\n`;
-      });
-      responseMessage += '\n¿Te interesa alguna? Responde con el número para más detalles.';
+    // Obtener o crear estado de conversación
+    if (!conversations.has(From)) {
+      conversations.set(From, { step: 'start', data: {} });
+    }
+    const conv = conversations.get(From);
+
+    // Mensaje inicial o "hola"
+    if (lowerBody.includes('hola') || lowerBody.includes('buenas') || conv.step === 'start') {
+      await sendWhatsAppMessage(From, 
+        '¡Hola! 👋 Soy el asistente de APE Inmobiliaria.\n\n' +
+        'Para ayudarte mejor, dime:\n\n' +
+        '1️⃣ ¿Buscas comprar o alquilar?\n' +
+        '2️⃣ ¿Qué tipo de propiedad? (casa, departamento, dúplex, terreno, oficina)\n' +
+        '3️⃣ ¿En qué zona/barrio?\n' +
+        '4️⃣ ¿Cuántos dormitorios necesitas?\n' +
+        '5️⃣ ¿Presupuesto máximo?\n\n' +
+        'O escribe todo junto: "Quiero alquilar un departamento en Villa Morra de 2 dormitorios hasta 600 USD"'
+      );
+      conv.step = 'waiting_info';
+      return;
     }
 
-    // Enviar respuesta final
-    await twilioClient.messages.create({
-      body: responseMessage,
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-      to: From,
-    });
+    // Si ya tenemos info o el usuario escribió una búsqueda completa
+    await sendWhatsAppMessage(From, '⏳ Buscando propiedades para ti...');
 
-    console.log('Response sent successfully');
+    // Extraer criterios
+    const criteria = await extractCriteriaWithAI(Body);
+    
+    // Verificar si tenemos criterios mínimos
+    if (!criteria.tipo && !criteria.tipoPropiedad && !criteria.barrio) {
+      await sendWhatsAppMessage(From,
+        'Necesito un poco más de información para ayudarte. Por ejemplo:\n\n' +
+        '• "Quiero alquilar"\n' +
+        '• "Busco una casa en Luque"\n' +
+        '• "Departamento 2 dormitorios hasta 500 USD"\n\n' +
+        '¿Qué estás buscando?'
+      );
+      return;
+    }
+
+    // Buscar propiedades
+    const results = searchProperties(criteria);
+    
+    if (results.length === 0) {
+      await sendWhatsAppMessage(From,
+        'No encontré propiedades con esos criterios. 😕\n\n' +
+        '¿Puedes ajustar tu búsqueda? Por ejemplo:\n' +
+        '• Cambiar el rango de precio\n' +
+        '• Otra zona o barrio\n' +
+        '• Otro tipo de propiedad'
+      );
+      return;
+    }
+
+    // Mostrar resultados (máximo 3)
+    let responseMessage = `¡Encontré ${results.length} propiedad${results.length > 1 ? 'es' : ''}! Aquí las mejores opciones:\n\n`;
+    
+    results.slice(0, 3).forEach((p, i) => {
+      responseMessage += `${i + 1}. ${p.title}\n`;
+      responseMessage += `   💰 USD ${p.price.toLocaleString()}${p.type === 'alquiler' ? '/mes' : ''}\n`;
+      responseMessage += `   📍 ${p.neighborhood}, ${p.city}\n`;
+      responseMessage += `   🏠 ${p.bedrooms} dorm, ${p.area}m²\n\n`;
+    });
+    
+    responseMessage += '¿Te interesa alguna? Responde con el número (1, 2 o 3) para más detalles, o dime si quieres ver otras opciones.';
+
+    await sendWhatsAppMessage(From, responseMessage);
+    
+    // Resetear conversación
+    conversations.delete(From);
 
   } catch (error) {
-    console.error('Error processing message:', error);
-    
-    // Mensaje de error al usuario
-    await twilioClient.messages.create({
-      body: 'Lo siento, hubo un error procesando tu mensaje. Por favor intenta de nuevo.',
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-      to: From,
-    });
+    console.error('Error:', error);
+    await sendWhatsAppMessage(From, 'Lo siento, hubo un error. Por favor intenta de nuevo.');
   }
 });
 
-// Twilio webhook validation (optional but recommended)
-app.post('/webhook/whatsapp/validate', (req, res) => {
-  const signature = req.headers['x-twilio-signature'];
-  const url = `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-  
-  const isValid = twilio.validateRequest(
-    process.env.TWILIO_AUTH_TOKEN,
-    signature,
-    url,
-    req.body
-  );
-
-  if (isValid) {
-    res.status(200).send('Valid');
-  } else {
-    res.status(403).send('Invalid signature');
-  }
-});
+// Función helper para enviar mensajes
+async function sendWhatsAppMessage(to, body) {
+  await twilioClient.messages.create({
+    body: body,
+    from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
+    to: to,
+  });
+}
 
 // ============ FRONTEND SERVING ============
 
