@@ -48,7 +48,7 @@ const properties = [
     bedrooms: 3,
     bathrooms: 2,
     area: 180,
-    images: ['https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800'],
+    images: ['https://images.unsplash.com/photo-1600596542815-ffad4c1539a9?w=800 '],
     amenities: ['Jardín privado', 'Cochera', 'Seguridad 24h'],
     contact: { name: 'María González', phone: '+595 981 234 567', whatsapp: '+595 981 234 567' },
   },
@@ -65,7 +65,7 @@ const properties = [
     bedrooms: 2,
     bathrooms: 1,
     area: 85,
-    images: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800'],
+    images: ['https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?w=800 '],
     amenities: ['Ascensor', 'Balcón'],
     contact: { name: 'Carlos Rodríguez', phone: '+595 982 345 678', whatsapp: '+595 982 345 678' },
   },
@@ -82,7 +82,7 @@ const properties = [
     bedrooms: 4,
     bathrooms: 3,
     area: 320,
-    images: ['https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=800'],
+    images: ['https://images.unsplash.com/photo-1600047509807-ba8f99d2cdde?w=800 '],
     amenities: ['Piscina', 'Patio amplio', 'Cochera doble'],
     contact: { name: 'Ana Martínez', phone: '+595 983 456 789', whatsapp: '+595 983 456 789' },
   },
@@ -99,7 +99,7 @@ const properties = [
     bedrooms: 0,
     bathrooms: 1,
     area: 50,
-    images: ['https://images.unsplash.com/photo-1497366216548-37526070297c?w=800'],
+    images: ['https://images.unsplash.com/photo-1497366216548-37526070297c?w=800 '],
     amenities: ['Amueblado', 'Sala de reuniones'],
     contact: { name: 'Pedro Benítez', phone: '+595 984 567 890', whatsapp: '+595 984 567 890' },
   },
@@ -116,7 +116,7 @@ const properties = [
     bedrooms: 0,
     bathrooms: 0,
     area: 1000,
-    images: ['https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800'],
+    images: ['https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800 '],
     amenities: ['Escritura', 'Acceso pavimentado'],
     contact: { name: 'Luisa Fernández', phone: '+595 985 678 901', whatsapp: '+595 985 678 901' },
   },
@@ -408,66 +408,6 @@ app.post('/webhook/whatsapp', async (req, res) => {
     // Mensaje de "buscando"
     await twilioClient.messages.create({
       body: 'Buscando propiedades para ti...',
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-      to: From,
-    });
-    
-    // Detectar si es primera vez o saludo
-    const esPrimeraVez = !greetedUsers.has(From);
-    const esSaludo = lowerBody.includes('hola') || 
-                     lowerBody.includes('buenas') || 
-                     lowerBody.includes('hey') ||
-                     lowerBody === 'kape' ||
-                     lowerBody === 'holi';
-    
-    // Detectar si ya quiere buscar algo especifico
-    const quiereBuscar = lowerBody.includes('casa') || 
-                         lowerBody.includes('departamento') || 
-                         lowerBody.includes('depto') || 
-                         lowerBody.includes('duplex') || 
-                         lowerBody.includes('dúplex') || 
-                         lowerBody.includes('terreno') || 
-                         lowerBody.includes('oficina') ||
-                         lowerBody.includes('local') ||
-                         lowerBody.includes('alquil') || 
-                         lowerBody.includes('compr') ||
-                         lowerBody.includes('busco') ||
-                         lowerBody.includes('necesito') ||
-                         lowerBody.includes('vendo') ||
-                         lowerBody.includes('vender') ||
-                         /^\d+$/.test(Body.trim());
-    
-    // Si es primera vez o saludo, y NO quiere buscar todavia, mostrar menu
-    if ((esPrimeraVez || esSaludo) && !quiereBuscar) {
-      greetedUsers.add(From);
-      
-      await twilioClient.messages.create({
-        body: 'Hola, soy Kape. ¿Con que te ayudo?\n\n' +
-              '1. Buscar propiedad para alquilar\n' +
-              '2. Buscar propiedad para comprar\n' +
-              '3. Vender mi propiedad\n' +
-              '4. Hablar con un agente\n\n' +
-              'Responde con el numero o escribime tu busqueda directamente.',
-        from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-        to: From,
-      });
-      return;
-    }
-    
-    // Si responde con numero, marcar como saludado y continuar
-    if (/^[1-4]$/.test(Body.trim())) {
-      greetedUsers.add(From);
-    }
-
-    // Mensaje de "buscando"
-    await twilioClient.messages.create({
-      body: 'Buscando propiedades para ti...',
-      from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
-      to: From,
-    });
-    // Mensaje de "estoy pensando" opcional
-    await twilioClient.messages.create({
-      body: '⏳ Buscando propiedades para ti...',
       from: `whatsapp:${process.env.TWILIO_WHATSAPP_NUMBER}`,
       to: From,
     });
